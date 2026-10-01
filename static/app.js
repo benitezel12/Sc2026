@@ -25,9 +25,11 @@ async function loadVendedores(){
         <div class="col-4"><small class="text-muted d-block">Asignadas</small><b>${bs.length}</b></div>
         <div class="col-4"><small class="text-muted d-block">Pagadas</small><b>${pagadas.length}</b></div>
         <div class="col-4"><small class="text-muted d-block">Pendientes</small><b>${pendientes.length}</b></div>
-        <div class="col-6"><small class="text-muted d-block">Vendido</small><b>RD$ ${vendido.toLocaleString()}</b></div>
-        <div class="col-6"><small class="text-muted d-block">Por entregar</small><b>RD$ ${porEntregar.toLocaleString()}</b></div>
+        <div class="col-4"><small class="text-muted d-block">Vendido</small><b>RD$ ${vendido.toLocaleString()}</b></div>
+        <div class="col-4"><small class="text-muted d-block">Entregado</small><b>RD$ ${entregado.toLocaleString()}</b></div>
+        <div class="col-4"><small class="text-muted d-block">Por entregar</small><b>RD$ ${porEntregar.toLocaleString()}</b></div>
       </div>
+      <button class="btn btn-outline-success w-100 mt-3" ${porEntregar<=0?"disabled":""} onclick="registrarEntrega(${v.id},${porEntregar})">Registrar entrega</button>
     </div>`;
   }).join("");
 }
@@ -46,3 +48,5 @@ async function asignar(){
 }
 
 async function marcarPagada(boletaId,numero){if(!confirm("¿Marcar la boleta #"+numero+" como pagada?"))return;const {data,error}=await sb.rpc("marcar_boleta_pagada",{p_boleta_id:boletaId});if(error){alert("No se pudo registrar el pago: "+error.message);return;}if(!data){alert("La boleta no pudo marcarse como pagada. Verifica su estado.");return;}alert("Boleta #"+numero+" marcada como PAGADA.");await loadBoletas();}
+
+async function registrarEntrega(vendedorId,maximo){const entrada=prompt("Monto recibido (máximo RD$ "+Number(maximo).toLocaleString()+"):",String(maximo));if(entrada===null)return;const monto=Number(String(entrada).replace(/,/g,""));if(!Number.isFinite(monto)||monto<=0){alert("Introduce un monto válido mayor que cero.");return;}if(monto>maximo){alert("El monto no puede superar lo pendiente.");return;}const observacion=prompt("Observación de la entrega (opcional):","")??"";if(!confirm("¿Registrar entrega de RD$ "+monto.toLocaleString()+"?"))return;const {error}=await sb.from("entregas_dinero").insert({vendedor_id:vendedorId,evento_id:1,monto,observacion:observacion||null});if(error){alert("No se pudo registrar la entrega: "+error.message);return;}alert("Entrega registrada correctamente.");await loadVendedores();}
