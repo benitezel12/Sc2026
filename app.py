@@ -24,5 +24,8 @@ def vendedores(): return render_template("vendedores.html")
 @app.get("/boletas")
 def boletas(): return render_template("boletas.html")
 
+@app.get("/vendedor")
+def vendedor(): return render_template("vendedor.html")
+
 if __name__=="__main__":
     app.run(debug=True)
