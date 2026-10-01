@@ -1,0 +1,4 @@
+{% extends "base.html" %}{% block content %}
+<h2>Boletas</h2><div class="row g-2 mb-3"><div class="col"><input id="desde" class="form-control" type="number" min="1" max="306" placeholder="Desde"></div><div class="col"><input id="hasta" class="form-control" type="number" min="1" max="306" placeholder="Hasta"></div></div>
+<select id="vend" class="form-select mb-2"></select><button class="btn btn-primary w-100 mb-4" onclick="asignar()">Asignar rango</button>
+<div id="tickets"></div>{% endblock %}{% block scripts %}<script>loadBoletas()</script>{% endblock %}
