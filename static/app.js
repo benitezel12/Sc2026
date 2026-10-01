@@ -1,7 +1,7 @@
 const sb=supabase.createClient(SC.url,SC.key);
 async function requireUser(){let {data:{session}}=await sb.auth.getSession();if(!session&&location.pathname!="/")location="/";return session}
 if(location.pathname!=="/") requireUser();
-async function login(){let email=document.querySelector("#email").value,password=document.querySelector("#password").value;let {error}=await sb.auth.signInWithPassword({email,password});document.querySelector("#msg").textContent=error?error.message:"Acceso correcto";if(!error)location="/dashboard"}
+async function login(){let email=document.querySelector("#email").value,password=document.querySelector("#password").value;let {error}=await sb.auth.signInWithPassword({email,password});document.querySelector("#msg").textContent=error?error.message:"Acceso correcto";if(!error){const {data:p}=await sb.from("perfiles").select("rol").eq("user_id",(await sb.auth.getUser()).data.user?.id).maybeSingle();location=p?.rol==="VENDEDOR"?"/vendedor":"/dashboard"}}
 document.querySelector("#logout")?.addEventListener("click",async()=>{await sb.auth.signOut();location="/"});
 async function loadDashboard(){let {data}=await sb.from("boletas").select("estado,precio");let counts={};let vendido=0;(data||[]).forEach(x=>{counts[x.estado]=(counts[x.estado]||0)+1;if(["PAGADA","UTILIZADA"].includes(x.estado))vendido+=Number(x.precio)});let vals=[["Total",(data||[]).length],["Disponibles",counts.DISPONIBLE||0],["Asignadas",counts.ASIGNADA||0],["Pagadas",(counts.PAGADA||0)+(counts.UTILIZADA||0)],["Entradas",counts.UTILIZADA||0],["Vendido","RD$ "+vendido.toLocaleString()]];document.querySelector("#kpis").innerHTML=vals.map(v=>`<div class="col-6 col-lg-4"><div class="card kpi shadow-sm p-3"><small class="text-muted">${v[0]}</small><div class="fs-3 fw-bold">${v[1]}</div></div></div>`).join("")}
 async function loadVendedores(){
@@ -50,3 +50,34 @@ async function marcarPagada(boletaId,numero){if(!confirm("¿Marcar la boleta #"+
 
 
 async function registrarComprador(boletaId,numero,actual,areaActual){const nombre=prompt("¿A quién se vendió la boleta #"+numero+"?",actual||"");if(nombre===null)return;const limpio=nombre.trim();if(!limpio){alert("Escribe el nombre del comprador.");return;}const opciones=["CJ","ADS","Escuela Básica","Politécnico","Deporte","Otros"];const mensaje="Área pastoral del comprador:\n1. CJ\n2. ADS\n3. Escuela Básica\n4. Politécnico\n5. Deporte\n6. Otros";const pred=areaActual?String(opciones.indexOf(areaActual)+1):"";const sel=prompt(mensaje,pred);if(sel===null)return;const n=Number(sel);if(!Number.isInteger(n)||n<1||n>6){alert("Selecciona un número del 1 al 6.");return;}const area=opciones[n-1];const {error}=await sb.from("boletas").update({vendida_a:limpio,area_pastoral_comprador:area}).eq("id",boletaId).eq("estado","ASIGNADA");if(error){alert("No se pudo guardar: "+error.message);return;}alert("Comprador y área pastoral registrados.");await loadBoletas();}
+
+let sellerBoletas=[],sellerScanner=null;
+async function loadSellerPortal(){
+ const {data:{user}}=await sb.auth.getUser(); if(!user)return;
+ const {data:p,error}=await sb.from("perfiles").select("rol,vendedor_id,nombre").eq("user_id",user.id).single();
+ if(error||p?.rol!=="VENDEDOR"||!p.vendedor_id){sellerTicketResult.innerHTML='<div class="alert alert-danger">Esta cuenta no está vinculada a un vendedor.</div>';return;}
+ const {data:v}=await sb.from("vendedores").select("nombre").eq("id",p.vendedor_id).single();
+ sellerName.textContent=v?.nombre||p.nombre||"Vendedor";
+ const {data:b}=await sb.from("boletas").select("id,numero,codigo_qr,estado,precio,vendida_a,area_pastoral_comprador").eq("vendedor_id",p.vendedor_id).order("numero");
+ sellerBoletas=b||[];
+ const pag=sellerBoletas.filter(x=>["PAGADA","UTILIZADA"].includes(x.estado)), pen=sellerBoletas.filter(x=>x.estado==="ASIGNADA");
+ const monto=pag.reduce((s,x)=>s+Number(x.precio||0),0);
+ sellerKpis.innerHTML=[["Asignadas",sellerBoletas.length],["Pagadas",pag.length],["Pendientes",pen.length],["Vendido","RD$ "+monto.toLocaleString()]].map(x=>'<div class="col-6"><div class="card shadow-sm p-3 text-center"><small class="text-muted">'+x[0]+'</small><b class="fs-4">'+x[1]+'</b></div></div>').join("");
+ renderSellerTickets();
+}
+function sellerTicketCard(x){
+ const editable=x.estado==="ASIGNADA";
+ return '<div class="card p-3 mb-2 shadow-sm"><div class="d-flex justify-content-between"><b>#'+x.numero+'</b><span class="badge text-bg-secondary">'+x.estado+'</span></div><div class="small mt-2">Vendida a: <b>'+(x.vendida_a||"Sin registrar")+'</b></div><div class="small">Área: <b>'+(x.area_pastoral_comprador||"Sin registrar")+'</b></div>'+(editable?'<div class="d-grid gap-2 mt-3"><button class="btn btn-outline-primary" onclick="sellerEditar('+x.id+')">Registrar / editar comprador</button><button class="btn btn-success" onclick="sellerPagar('+x.id+',\''+x.numero+'\')">Marcar pagada</button></div>':"")+'</div>';
+}
+function renderSellerTickets(){sellerTickets.innerHTML=sellerBoletas.map(sellerTicketCard).join("")||'<div class="alert alert-info">No tienes boletas asignadas.</div>'}
+function mostrarMisBoletas(){sellerTickets.classList.remove("d-none");sellerTicketResult.innerHTML="";cerrarScannerVendedor();}
+async function sellerEditar(id){const x=sellerBoletas.find(b=>b.id===id);if(!x)return;await registrarComprador(x.id,x.numero,x.vendida_a||"",x.area_pastoral_comprador||"");await loadSellerPortal();}
+async function sellerPagar(id,numero){await marcarPagada(id,numero);await loadSellerPortal();}
+async function iniciarScannerVendedor(){
+ sellerTickets.classList.add("d-none");sellerTicketResult.innerHTML="";sellerScan.classList.remove("d-none");
+ if(!window.Html5Qrcode){sellerTicketResult.innerHTML='<div class="alert alert-danger">No se pudo cargar el lector QR.</div>';return;}
+ sellerScanner=new Html5Qrcode("reader");
+ try{await sellerScanner.start({facingMode:"environment"},{fps:10,qrbox:{width:250,height:250}},codigo=>{const x=sellerBoletas.find(b=>b.codigo_qr===codigo);cerrarScannerVendedor();sellerTicketResult.innerHTML=x?sellerTicketCard(x):'<div class="alert alert-danger">Esta boleta no está asignada a tu usuario.</div>';});}
+ catch(e){sellerTicketResult.innerHTML='<div class="alert alert-warning">No se pudo abrir la cámara. Verifica el permiso del navegador.</div>';cerrarScannerVendedor();}
+}
+async function cerrarScannerVendedor(){if(sellerScanner){try{await sellerScanner.stop();}catch(e){}try{await sellerScanner.clear();}catch(e){}sellerScanner=null;}document.querySelector("#sellerScan")?.classList.add("d-none");}
