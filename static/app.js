@@ -4,7 +4,33 @@ if(location.pathname!=="/") requireUser();
 async function login(){let email=document.querySelector("#email").value,password=document.querySelector("#password").value;let {error}=await sb.auth.signInWithPassword({email,password});document.querySelector("#msg").textContent=error?error.message:"Acceso correcto";if(!error)location="/dashboard"}
 document.querySelector("#logout")?.addEventListener("click",async()=>{await sb.auth.signOut();location="/"});
 async function loadDashboard(){let {data}=await sb.from("boletas").select("estado,precio");let counts={};let vendido=0;(data||[]).forEach(x=>{counts[x.estado]=(counts[x.estado]||0)+1;if(["PAGADA","UTILIZADA"].includes(x.estado))vendido+=Number(x.precio)});let vals=[["Total",(data||[]).length],["Disponibles",counts.DISPONIBLE||0],["Asignadas",counts.ASIGNADA||0],["Pagadas",(counts.PAGADA||0)+(counts.UTILIZADA||0)],["Entradas",counts.UTILIZADA||0],["Vendido","RD$ "+vendido.toLocaleString()]];document.querySelector("#kpis").innerHTML=vals.map(v=>`<div class="col-6 col-lg-4"><div class="card kpi shadow-sm p-3"><small class="text-muted">${v[0]}</small><div class="fs-3 fw-bold">${v[1]}</div></div></div>`).join("")}
-async function loadVendedores(){let {data,error}=await sb.from("vendedores").select("*").order("nombre");sellerList.innerHTML=error?error.message:(data||[]).map(v=>`<div class="card p-3 mb-2 shadow-sm"><b>${v.nombre}</b><span>${v.telefono||""}</span><small>${v.email||""}</small></div>`).join("")}
+async function loadVendedores(){
+  const [{data:vendedores,error},{data:boletas},{data:entregas}]=await Promise.all([
+    sb.from("vendedores").select("*").order("nombre"),
+    sb.from("boletas").select("vendedor_id,estado,precio"),
+    sb.from("entregas_dinero").select("vendedor_id,monto")
+  ]);
+  if(error){sellerList.innerHTML=error.message;return;}
+  sellerList.innerHTML=(vendedores||[]).map(v=>{
+    const bs=(boletas||[]).filter(b=>b.vendedor_id===v.id);
+    const pagadas=bs.filter(b=>["PAGADA","UTILIZADA"].includes(b.estado));
+    const pendientes=bs.filter(b=>b.estado==="ASIGNADA");
+    const vendido=pagadas.reduce((s,b)=>s+Number(b.precio||0),0);
+    const entregado=(entregas||[]).filter(e=>e.vendedor_id===v.id).reduce((s,e)=>s+Number(e.monto||0),0);
+    const porEntregar=Math.max(0,vendido-entregado);
+    return `<div class="card p-3 mb-3 shadow-sm">
+      <div class="d-flex justify-content-between align-items-start"><div><b class="fs-5">${v.nombre}</b><div>${v.telefono||""}</div><small class="text-muted">${v.email||""}</small></div><span class="badge text-bg-success">${v.activo?"Activo":"Inactivo"}</span></div>
+      <hr class="my-2">
+      <div class="row g-2 text-center">
+        <div class="col-4"><small class="text-muted d-block">Asignadas</small><b>${bs.length}</b></div>
+        <div class="col-4"><small class="text-muted d-block">Pagadas</small><b>${pagadas.length}</b></div>
+        <div class="col-4"><small class="text-muted d-block">Pendientes</small><b>${pendientes.length}</b></div>
+        <div class="col-6"><small class="text-muted d-block">Vendido</small><b>RD$ ${vendido.toLocaleString()}</b></div>
+        <div class="col-6"><small class="text-muted d-block">Por entregar</small><b>RD$ ${porEntregar.toLocaleString()}</b></div>
+      </div>
+    </div>`;
+  }).join("");
+}
 async function crearVendedor(){let {error}=await sb.from("vendedores").insert({nombre:vn.value,telefono:vt.value||null,email:ve.value||null});alert(error?error.message:"Vendedor creado");if(!error)loadVendedores()}
 async function loadBoletas(){let [{data:b},{data:v}]=await Promise.all([sb.from("boletas").select("id,numero,estado,vendedor_id").order("numero"),sb.from("vendedores").select("id,nombre").eq("activo",true).order("nombre")]);vend.innerHTML='<option value="">Seleccione vendedor</option>'+(v||[]).map(x=>`<option value="${x.id}">${x.nombre}</option>`).join("");tickets.innerHTML=(b||[]).map(x=>`<div class="card p-2 mb-2 shadow-sm"><div class="d-flex flex-row justify-content-between align-items-center"><b>#${x.numero}</b><div class="d-flex gap-2 align-items-center"><span class="badge text-bg-secondary">${x.estado}</span>${x.estado==="ASIGNADA"?`<button class="btn btn-sm btn-success" onclick="marcarPagada(${x.id},\'${x.numero}\')">Marcar pagada</button>`:""}</div></div></div>`).join("")}
 async function asignar(){
