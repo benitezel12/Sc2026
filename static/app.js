@@ -7,4 +7,14 @@ async function loadDashboard(){let {data}=await sb.from("boletas").select("estad
 async function loadVendedores(){let {data,error}=await sb.from("vendedores").select("*").order("nombre");sellerList.innerHTML=error?error.message:(data||[]).map(v=>`<div class="card p-3 mb-2 shadow-sm"><b>${v.nombre}</b><span>${v.telefono||""}</span><small>${v.email||""}</small></div>`).join("")}
 async function crearVendedor(){let {error}=await sb.from("vendedores").insert({nombre:vn.value,telefono:vt.value||null,email:ve.value||null});alert(error?error.message:"Vendedor creado");if(!error)loadVendedores()}
 async function loadBoletas(){let [{data:b},{data:v}]=await Promise.all([sb.from("boletas").select("id,numero,estado,vendedor_id").order("numero"),sb.from("vendedores").select("id,nombre").eq("activo",true).order("nombre")]);vend.innerHTML='<option value="">Seleccione vendedor</option>'+(v||[]).map(x=>`<option value="${x.id}">${x.nombre}</option>`).join("");tickets.innerHTML=(b||[]).map(x=>`<div class="card p-2 mb-2 shadow-sm d-flex flex-row justify-content-between"><b>#${x.numero}</b><span class="badge text-bg-secondary">${x.estado}</span></div>`).join("")}
-async function asignar(){alert("La asignación se ejecutará por el backend seguro en la siguiente etapa.");}
+async function asignar(){
+  const vendedorId=Number(vend.value);
+  const desde=Number(document.querySelector("#desde")?.value);
+  const hasta=Number(document.querySelector("#hasta")?.value);
+  if(!vendedorId||!desde||!hasta){alert("Selecciona vendedor y rango de boletas.");return;}
+  if(desde>hasta){alert("El número inicial no puede ser mayor que el final.");return;}
+  const {data,error}=await sb.rpc("asignar_boletas",{p_vendedor_id:vendedorId,p_numero_desde:desde,p_numero_hasta:hasta});
+  if(error){alert("No se pudo asignar: "+error.message);return;}
+  alert(data+" boleta(s) asignada(s) correctamente.");
+  await loadBoletas();
+}
