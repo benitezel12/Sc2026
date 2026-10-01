@@ -1,0 +1,15 @@
+{% extends "base.html" %}{% block content %}
+<div class="mb-3"><h2 class="mb-1">Mi gestión</h2><div id="sellerName" class="text-muted"></div></div>
+<div id="sellerKpis" class="row g-2 mb-4"></div>
+<div class="d-grid gap-2 mb-4">
+<button class="btn btn-primary btn-lg py-3" onclick="iniciarScannerVendedor()">📷 Escanear boleta</button>
+<button class="btn btn-outline-primary btn-lg py-3" onclick="mostrarMisBoletas()">🎟️ Mis boletas</button>
+</div>
+<div id="sellerScan" class="card p-3 mb-3 d-none"><div id="reader"></div><button class="btn btn-outline-secondary mt-2" onclick="cerrarScannerVendedor()">Cerrar cámara</button></div>
+<div id="sellerTicketResult"></div>
+<div id="sellerTickets" class="d-none"></div>
+{% endblock %}
+{% block scripts %}
+<script src="https://unpkg.com/html5-qrcode"></script>
+<script>loadSellerPortal()</script>
+{% endblock %}
