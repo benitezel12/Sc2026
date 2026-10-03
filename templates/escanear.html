@@ -1,0 +1,7 @@
+{% extends "base.html" %}{% block content %}
+<div class="mb-3"><h2>Escanear / Buscar boleta</h2><p class="text-muted mb-0">Consulta rápida para administración.</p></div>
+<div class="card p-3 mb-3 shadow-sm"><label class="form-label fw-bold">Buscar por número</label><div class="input-group"><input id="adminNumero" class="form-control form-control-lg" inputmode="numeric" placeholder="Ej. 25 o 0025" onkeydown="if(event.key==='Enter')buscarBoletaAdmin()"><button class="btn btn-primary" onclick="buscarBoletaAdmin()">Buscar</button></div></div>
+<div class="d-grid mb-3"><button class="btn btn-primary btn-lg py-3" onclick="iniciarScannerAdmin()">📷 Escanear código QR</button></div>
+<div id="adminScanPanel" class="card p-3 mb-3 d-none"><div id="adminReader"></div><button class="btn btn-outline-secondary mt-2" onclick="cerrarScannerAdmin()">Cerrar cámara</button></div>
+<div id="adminScanResult"></div>
+{% endblock %}{% block scripts %}<script src="https://unpkg.com/html5-qrcode"></script>{% endblock %}
