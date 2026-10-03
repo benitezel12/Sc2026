@@ -3,7 +3,7 @@
 <div id="sellerKpis" class="row g-2 mb-4"></div>
 <div class="d-grid gap-2 mb-4">
 <button class="btn btn-primary btn-lg py-3" onclick="iniciarScannerVendedor()">📷 Escanear boleta</button>
-<button class="btn btn-outline-primary btn-lg py-3" onclick="mostrarMisBoletas()">🎟️ Mis boletas</button><button class="btn btn-outline-secondary btn-lg py-3" onclick="mostrarVentasGenerales()">📊 Ventas generales</button>
+<button class="btn btn-outline-primary btn-lg py-3" onclick="mostrarMisBoletas()">🎟️ Mis boletas</button><button class="btn btn-outline-secondary btn-lg py-3" onclick="mostrarVentasGenerales()">📊 Ventas generales</button><a class="btn btn-outline-secondary btn-lg py-3" href="/donaciones">🤝 Donaciones</a>
 </div>
 <div class="card p-3 mb-3 shadow-sm"><label class="form-label fw-bold">Buscar boleta por número</label><div class="input-group"><input id="sellerNumeroBuscar" class="form-control" inputmode="numeric" placeholder="Ej. 25 o 0025" onkeydown="if(event.key===\'Enter\')buscarBoletaVendedor()"><button class="btn btn-primary" onclick="buscarBoletaVendedor()">Buscar</button></div><small class="text-muted mt-2">Puedes consultar cualquier boleta. Solo podrás gestionar las que estén asignadas a ti.</small></div><div id="sellerScan" class="card p-3 mb-3 d-none"><div id="reader"></div><button class="btn btn-outline-secondary mt-2" onclick="cerrarScannerVendedor()">Cerrar cámara</button></div>
 <div id="sellerTicketResult"></div>
