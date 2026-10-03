@@ -39,25 +39,36 @@ async function eliminarDonacionAdmin(id){
 const _renderDonacionesBase=renderDonaciones;
 renderDonaciones=function(){
   _renderDonacionesBase();
-  if(donationProfile?.rol!=="ADMIN")return;
   const cards=[...document.querySelectorAll("#donationHistory > .border")];
+  const visibles=document.querySelector("#dnFiltroRubro")?.value
+    ? donationHistory.filter(x=>x.codigo_rubro===document.querySelector("#dnFiltroRubro").value)
+    : donationHistory;
   cards.forEach((card,i)=>{
-    const h=(document.querySelector("#dnFiltroRubro")?.value
-      ? donationHistory.filter(x=>x.codigo_rubro===document.querySelector("#dnFiltroRubro").value)
-      : donationHistory)[i];
+    const h=visibles[i];
     if(!h)return;
-    if(card.querySelector(".donation-admin-maint"))return;
-    const row=document.createElement("div");
-    row.className="donation-admin-maint d-flex gap-2 mt-2 flex-wrap";
-    const edit=document.createElement("button");
-    edit.className="btn btn-sm btn-outline-secondary";
-    edit.textContent="Editar";
-    edit.onclick=()=>editarDonacionAdmin(h.donacion_id);
-    const del=document.createElement("button");
-    del.className="btn btn-sm btn-outline-danger";
-    del.textContent="Eliminar";
-    del.onclick=()=>eliminarDonacionAdmin(h.donacion_id);
-    row.append(edit,del);
-    card.appendChild(row);
+    let row=card.querySelector(".donation-maint");
+    if(!row){
+      row=document.createElement("div");
+      row.className="donation-maint d-flex gap-2 mt-2 flex-wrap";
+      card.appendChild(row);
+    }
+    if(h.telefono&&!row.querySelector(".donation-whatsapp")){
+      const wa=document.createElement("button");
+      wa.className="donation-whatsapp btn btn-sm btn-success";
+      wa.textContent="💬 Agradecer por WhatsApp";
+      wa.onclick=()=>abrirWhatsAppAgradecimiento(h.bienhechor,h.telefono,h.articulo);
+      row.appendChild(wa);
+    }
+    if(donationProfile?.rol==="ADMIN"&&!row.querySelector(".donation-edit")){
+      const edit=document.createElement("button");
+      edit.className="donation-edit btn btn-sm btn-outline-secondary";
+      edit.textContent="Editar";
+      edit.onclick=()=>editarDonacionAdmin(h.donacion_id);
+      const del=document.createElement("button");
+      del.className="donation-delete btn btn-sm btn-outline-danger";
+      del.textContent="Eliminar";
+      del.onclick=()=>eliminarDonacionAdmin(h.donacion_id);
+      row.append(edit,del);
+    }
   });
 };
