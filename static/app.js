@@ -121,7 +121,7 @@ async function iniciarScannerAdmin(){
 async function cerrarScannerAdmin(){if(adminScanner){try{await adminScanner.stop();}catch(e){}try{await adminScanner.clear();}catch(e){}adminScanner=null;}document.querySelector("#adminScanPanel")?.classList.add("d-none");}
 
 
-let donationItems=[], donationHistory=[];
+let donationItems=[], donationHistory=[], donationProfile=null;
 const donationRubros={
   AQ:"Alquileres",
   BL:"Bebidas",
@@ -133,13 +133,18 @@ const donationRubros={
 };
 
 async function loadDonaciones(){
-  const [{data:items,error:itemsError},{data:hist,error:histError}]=await Promise.all([
+  const {data:{user}}=await sb.auth.getUser();
+  const [{data:items,error:itemsError},{data:hist,error:histError},{data:perfil}]=await Promise.all([
     sb.from("donacion_articulos").select("id,codigo_rubro,rubro,articulo,cantidad_necesaria,precio_unitario,costo_total").eq("activo",true).order("codigo_rubro").order("articulo"),
-    sb.rpc("listar_donaciones")
+    sb.rpc("listar_donaciones"),
+    sb.from("perfiles").select("nombre,rol").eq("user_id",user?.id).maybeSingle()
   ]);
+  donationProfile=perfil||null;
   if(itemsError){document.querySelector("#donationApp")?.replaceChildren(document.createTextNode(itemsError.message));return;}
   donationItems=items||[];
   donationHistory=hist||[];
+  const gestor=document.querySelector("#dnGestionadoPor");
+  if(gestor && !gestor.value) gestor.value=donationProfile?.nombre||"";
 
   const rubros=[...new Set(donationItems.map(x=>x.codigo_rubro))];
   const sel=document.querySelector("#dnRubro");
@@ -179,6 +184,7 @@ function actualizarCamposDonacion(){
   const tipo=document.querySelector("#dnTipo")?.value;
   document.querySelector("#dnCantidadWrap")?.classList.toggle("d-none",tipo!=="ARTICULO");
   document.querySelector("#dnMontoWrap")?.classList.toggle("d-none",tipo!=="APORTE_ECONOMICO");
+  document.querySelector("#dnMedioWrap")?.classList.toggle("d-none",!["COSTEA_TOTAL","APORTE_ECONOMICO"].includes(tipo));
   const x=articuloDonacionSeleccionado();
   const box=document.querySelector("#dnArticuloInfo");
   if(tipo==="COSTEA_TOTAL"&&x&&box){
@@ -196,16 +202,21 @@ async function registrarDonacion(){
   const tipo=document.querySelector("#dnTipo")?.value;
   const cantidad=Number(document.querySelector("#dnCantidad")?.value||0);
   const monto=Number(document.querySelector("#dnMonto")?.value||0);
+  const medio=document.querySelector("#dnMedio")?.value||null;
+  const gestionadoPor=document.querySelector("#dnGestionadoPor")?.value.trim();
 
   if(!nombre){alert("Escribe el nombre del bienhechor.");return;}
   if(!articulo){alert("Selecciona un artículo.");return;}
   if(tipo==="ARTICULO"&&cantidad<=0){alert("Indica la cantidad que llevará.");return;}
   if(tipo==="APORTE_ECONOMICO"&&monto<=0){alert("Indica el monto económico.");return;}
+  if(["COSTEA_TOTAL","APORTE_ECONOMICO"].includes(tipo)&&!medio){alert("Indica si será transferencia bancaria o efectivo.");return;}
+  if(!gestionadoPor){alert("Indica quién gestionó la donación.");return;}
 
   let detalle="";
   if(tipo==="ARTICULO") detalle=cantidad+" unidad(es) de "+articulo.articulo;
   if(tipo==="COSTEA_TOTAL") detalle="costeará el total de "+articulo.articulo+" (RD$ "+Number(articulo.costo_total||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+")";
   if(tipo==="APORTE_ECONOMICO") detalle="aportará RD$ "+monto.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+" para "+articulo.articulo;
+  if(["COSTEA_TOTAL","APORTE_ECONOMICO"].includes(tipo)) detalle+=" mediante "+(medio==="TRANSFERENCIA"?"transferencia bancaria":"efectivo");
 
   if(!confirm(nombre+" "+detalle+".\n\n¿Confirmas esta donación?"))return;
 
@@ -216,7 +227,9 @@ async function registrarDonacion(){
     p_articulo_id:articulo.id,
     p_tipo_aporte:tipo,
     p_cantidad:tipo==="ARTICULO"?cantidad:null,
-    p_monto:tipo==="APORTE_ECONOMICO"?monto:null
+    p_monto:tipo==="APORTE_ECONOMICO"?monto:null,
+    p_medio_entrega:["COSTEA_TOTAL","APORTE_ECONOMICO"].includes(tipo)?medio:null,
+    p_gestionado_por:gestionadoPor
   });
   if(error){alert("No se pudo registrar: "+error.message);return;}
   if(data){
@@ -225,10 +238,14 @@ async function registrarDonacion(){
     document.querySelector("#dnObs").value="";
     document.querySelector("#dnCantidad").value="";
     document.querySelector("#dnMonto").value="";
-    alert("Donación registrada correctamente.");
+    document.querySelector("#dnGestionadoPor").value=donationProfile?.nombre||"";
+    alert("Donación registrada correctamente. Queda pendiente de confirmación y recepción por administración.");
     await loadDonaciones();
   }
 }
+
+async function confirmarDonacionAdmin(id){if(!confirm("¿Confirmar esta donación?"))return;const {data,error}=await sb.rpc("admin_confirmar_donacion",{p_donacion_id:id});if(error){alert(error.message);return;}if(data){alert("Donación confirmada.");await loadDonaciones();}}
+async function recibirDonacionAdmin(id){if(!confirm("¿Confirmar que esta donación ya fue recibida?"))return;const {data,error}=await sb.rpc("admin_marcar_donacion_recibida",{p_donacion_id:id});if(error){alert(error.message);return;}if(data){alert("Donación marcada como recibida.");await loadDonaciones();}}
 
 function renderDonaciones(){
   if(!donationItems.length)return;
@@ -252,7 +269,9 @@ function renderDonaciones(){
     ["Artículos",donationItems.length],
     ["Bienhechores",bienhechores],
     ["Comprometido","RD$ "+comprometidoTotal.toLocaleString(undefined,{maximumFractionDigits:2})],
-    ["Presupuesto","RD$ "+presupuesto.toLocaleString(undefined,{maximumFractionDigits:2})]
+    ["Presupuesto","RD$ "+presupuesto.toLocaleString(undefined,{maximumFractionDigits:2})],
+    ["Confirmadas",donationHistory.filter(x=>x.confirmada).length],
+    ["Recibidas",donationHistory.filter(x=>x.recibida).length]
   ].map(x=>'<div class="col-6 col-lg-3"><div class="card kpi p-3 text-center"><small class="text-muted">'+x[0]+'</small><b class="fs-5">'+x[1]+'</b></div></div>').join("");
 
   const prog=document.querySelector("#donationProgress");
@@ -272,7 +291,10 @@ function renderDonaciones(){
     const tipo=h.tipo_aporte==="ARTICULO"?"Llevará artículo":h.tipo_aporte==="COSTEA_TOTAL"?"Costea total":"Aporte económico";
     const valor=h.tipo_aporte==="ARTICULO"?(Number(h.cantidad||0)+" unidad(es)"):h.tipo_aporte==="COSTEA_TOTAL"?("RD$ "+Number(h.costo_total||0).toLocaleString(undefined,{maximumFractionDigits:2})):("RD$ "+Number(h.monto||0).toLocaleString(undefined,{maximumFractionDigits:2}));
     const fecha=new Date(h.creado_en).toLocaleString();
-    return '<div class="border rounded p-3 mb-2"><div class="d-flex justify-content-between gap-2"><div><b>'+h.bienhechor+'</b><div class="small text-muted">'+(h.telefono||"Sin teléfono")+'</div></div><span class="badge text-bg-secondary">'+h.codigo_rubro+'</span></div><div class="mt-2"><b>'+h.articulo+'</b> · '+tipo+' · '+valor+'</div><div class="small text-muted mt-1">Registrado por '+(h.vendedor_nombre||"Administración")+' · '+fecha+'</div>'+(h.observacion?'<div class="small mt-1">'+h.observacion+'</div>':'')+'</div>';
+    const estado=h.recibida?'<span class="badge text-bg-success">RECIBIDA</span>':h.confirmada?'<span class="badge text-bg-primary">CONFIRMADA</span>':'<span class="badge text-bg-warning">PENDIENTE</span>';
+    const medio=h.medio_entrega?'<div class="small"><b>Entrega:</b> '+(h.medio_entrega==="TRANSFERENCIA"?"Transferencia bancaria":"Efectivo")+'</div>':'';
+    const acciones=donationProfile?.rol==="ADMIN"?'<div class="d-flex gap-2 mt-2">'+(!h.confirmada?'<button class="btn btn-sm btn-outline-primary" onclick="confirmarDonacionAdmin('+h.donacion_id+')">Confirmar</button>':'')+(!h.recibida?'<button class="btn btn-sm btn-success" onclick="recibirDonacionAdmin('+h.donacion_id+')">Marcar recibida</button>':'')+'</div>':'';
+    return '<div class="border rounded p-3 mb-2"><div class="d-flex justify-content-between gap-2"><div><b>'+h.bienhechor+'</b><div class="small text-muted">'+(h.telefono||"Sin teléfono")+'</div></div><div class="text-end"><span class="badge text-bg-secondary">'+h.codigo_rubro+'</span><div class="mt-1">'+estado+'</div></div></div><div class="mt-2"><b>'+h.articulo+'</b> · '+tipo+' · '+valor+'</div>'+medio+'<div class="small"><b>Gestionado por:</b> '+(h.gestionado_por||h.vendedor_nombre||"Sin registrar")+'</div><div class="small text-muted mt-1">Registrado '+fecha+'</div>'+(h.observacion?'<div class="small mt-1">'+h.observacion+'</div>':'')+acciones+'</div>';
   }).join("")||'<div class="text-muted">Todavía no hay donaciones registradas.</div>';
 }
 
