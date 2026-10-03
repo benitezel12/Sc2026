@@ -116,3 +116,159 @@ async function iniciarScannerAdmin(){
  catch(e){adminScanResult.innerHTML='<div class="alert alert-warning">No se pudo abrir la cámara. Verifica el permiso del navegador.</div>';await cerrarScannerAdmin();}
 }
 async function cerrarScannerAdmin(){if(adminScanner){try{await adminScanner.stop();}catch(e){}try{await adminScanner.clear();}catch(e){}adminScanner=null;}document.querySelector("#adminScanPanel")?.classList.add("d-none");}
+
+
+let donationItems=[], donationHistory=[];
+const donationRubros={
+  AQ:"Alquileres",
+  BL:"Bebidas",
+  CN:"Carnes",
+  DR:"Desechables",
+  VC:"Condimentos",
+  VT:"Víveres",
+  OTROS:"Otros"
+};
+
+async function loadDonaciones(){
+  const [{data:items,error:itemsError},{data:hist,error:histError}]=await Promise.all([
+    sb.from("donacion_articulos").select("id,codigo_rubro,rubro,articulo,cantidad_necesaria,precio_unitario,costo_total").eq("activo",true).order("codigo_rubro").order("articulo"),
+    sb.rpc("listar_donaciones")
+  ]);
+  if(itemsError){document.querySelector("#donationApp")?.replaceChildren(document.createTextNode(itemsError.message));return;}
+  donationItems=items||[];
+  donationHistory=hist||[];
+
+  const rubros=[...new Set(donationItems.map(x=>x.codigo_rubro))];
+  const sel=document.querySelector("#dnRubro");
+  if(sel) sel.innerHTML=rubros.map(r=>'<option value="'+r+'">'+r+' - '+(donationRubros[r]||donationItems.find(x=>x.codigo_rubro===r)?.rubro||r)+'</option>').join("");
+  const filtro=document.querySelector("#dnFiltroRubro");
+  if(filtro) filtro.innerHTML='<option value="">Todos los rubros</option>'+rubros.map(r=>'<option value="'+r+'">'+r+' - '+(donationRubros[r]||donationItems.find(x=>x.codigo_rubro===r)?.rubro||r)+'</option>').join("");
+
+  filtrarArticulosDonacion();
+  actualizarCamposDonacion();
+  renderDonaciones();
+}
+
+function filtrarArticulosDonacion(){
+  const rubro=document.querySelector("#dnRubro")?.value;
+  const art=document.querySelector("#dnArticulo");
+  if(!art)return;
+  const lista=donationItems.filter(x=>x.codigo_rubro===rubro);
+  art.innerHTML=lista.map(x=>'<option value="'+x.id+'">'+x.articulo+'</option>').join("");
+  actualizarInfoArticuloDonacion();
+}
+
+function articuloDonacionSeleccionado(){
+  const id=Number(document.querySelector("#dnArticulo")?.value);
+  return donationItems.find(x=>x.id===id);
+}
+
+function actualizarInfoArticuloDonacion(){
+  const x=articuloDonacionSeleccionado();
+  const box=document.querySelector("#dnArticuloInfo");
+  if(!box)return;
+  if(!x){box.textContent="Selecciona un artículo.";return;}
+  box.innerHTML='<b>'+x.articulo+'</b><br><span class="small text-muted">Necesidad estimada: '+Number(x.cantidad_necesaria||0).toLocaleString()+' · Precio unitario: RD$ '+Number(x.precio_unitario||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+' · Costo estimado total: <b>RD$ '+Number(x.costo_total||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+'</b></span>';
+  actualizarCamposDonacion();
+}
+
+function actualizarCamposDonacion(){
+  const tipo=document.querySelector("#dnTipo")?.value;
+  document.querySelector("#dnCantidadWrap")?.classList.toggle("d-none",tipo!=="ARTICULO");
+  document.querySelector("#dnMontoWrap")?.classList.toggle("d-none",tipo!=="APORTE_ECONOMICO");
+  const x=articuloDonacionSeleccionado();
+  const box=document.querySelector("#dnArticuloInfo");
+  if(tipo==="COSTEA_TOTAL"&&x&&box){
+    box.innerHTML='<b>'+x.articulo+'</b><br><span class="small">El bienhechor cubrirá el costo estimado total de <b>RD$ '+Number(x.costo_total||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+'</b>.</span>';
+  } else if(x&&box){
+    box.innerHTML='<b>'+x.articulo+'</b><br><span class="small text-muted">Necesidad estimada: '+Number(x.cantidad_necesaria||0).toLocaleString()+' · Precio unitario: RD$ '+Number(x.precio_unitario||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+' · Costo estimado total: <b>RD$ '+Number(x.costo_total||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+'</b></span>';
+  }
+}
+
+async function registrarDonacion(){
+  const nombre=document.querySelector("#dnNombre")?.value.trim();
+  const telefono=document.querySelector("#dnTelefono")?.value.trim();
+  const observacion=document.querySelector("#dnObs")?.value.trim();
+  const articulo=articuloDonacionSeleccionado();
+  const tipo=document.querySelector("#dnTipo")?.value;
+  const cantidad=Number(document.querySelector("#dnCantidad")?.value||0);
+  const monto=Number(document.querySelector("#dnMonto")?.value||0);
+
+  if(!nombre){alert("Escribe el nombre del bienhechor.");return;}
+  if(!articulo){alert("Selecciona un artículo.");return;}
+  if(tipo==="ARTICULO"&&cantidad<=0){alert("Indica la cantidad que llevará.");return;}
+  if(tipo==="APORTE_ECONOMICO"&&monto<=0){alert("Indica el monto económico.");return;}
+
+  let detalle="";
+  if(tipo==="ARTICULO") detalle=cantidad+" unidad(es) de "+articulo.articulo;
+  if(tipo==="COSTEA_TOTAL") detalle="costeará el total de "+articulo.articulo+" (RD$ "+Number(articulo.costo_total||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+")";
+  if(tipo==="APORTE_ECONOMICO") detalle="aportará RD$ "+monto.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+" para "+articulo.articulo;
+
+  if(!confirm(nombre+" "+detalle+".\n\n¿Confirmas esta donación?"))return;
+
+  const {data,error}=await sb.rpc("registrar_donacion",{
+    p_bienhechor:nombre,
+    p_telefono:telefono||null,
+    p_observacion:observacion||null,
+    p_articulo_id:articulo.id,
+    p_tipo_aporte:tipo,
+    p_cantidad:tipo==="ARTICULO"?cantidad:null,
+    p_monto:tipo==="APORTE_ECONOMICO"?monto:null
+  });
+  if(error){alert("No se pudo registrar: "+error.message);return;}
+  if(data){
+    document.querySelector("#dnNombre").value="";
+    document.querySelector("#dnTelefono").value="";
+    document.querySelector("#dnObs").value="";
+    document.querySelector("#dnCantidad").value="";
+    document.querySelector("#dnMonto").value="";
+    alert("Donación registrada correctamente.");
+    await loadDonaciones();
+  }
+}
+
+function renderDonaciones(){
+  if(!donationItems.length)return;
+  const filtro=document.querySelector("#dnFiltroRubro")?.value||"";
+  const items=filtro?donationItems.filter(x=>x.codigo_rubro===filtro):donationItems;
+  const hist=filtro?donationHistory.filter(x=>x.codigo_rubro===filtro):donationHistory;
+
+  const comprometidoTotal=donationHistory.reduce((s,h)=>{
+    if(h.tipo_aporte==="COSTEA_TOTAL") return s+Number(h.costo_total||0);
+    if(h.tipo_aporte==="APORTE_ECONOMICO") return s+Number(h.monto||0);
+    if(h.tipo_aporte==="ARTICULO"){
+      const item=donationItems.find(x=>x.id===h.articulo_id);
+      return s+(Number(h.cantidad||0)*Number(item?.precio_unitario||0));
+    }
+    return s;
+  },0);
+  const presupuesto=donationItems.reduce((s,x)=>s+Number(x.costo_total||0),0);
+  const bienhechores=new Set(donationHistory.map(x=>(x.bienhechor||"").trim().toLowerCase()).filter(Boolean)).size;
+  const kpis=document.querySelector("#donationKpis");
+  if(kpis) kpis.innerHTML=[
+    ["Artículos",donationItems.length],
+    ["Bienhechores",bienhechores],
+    ["Comprometido","RD$ "+comprometidoTotal.toLocaleString(undefined,{maximumFractionDigits:2})],
+    ["Presupuesto","RD$ "+presupuesto.toLocaleString(undefined,{maximumFractionDigits:2})]
+  ].map(x=>'<div class="col-6 col-lg-3"><div class="card kpi p-3 text-center"><small class="text-muted">'+x[0]+'</small><b class="fs-5">'+x[1]+'</b></div></div>').join("");
+
+  const prog=document.querySelector("#donationProgress");
+  if(prog) prog.innerHTML=items.map(x=>{
+    const hs=donationHistory.filter(h=>h.articulo_id===x.id);
+    const completo=hs.some(h=>h.tipo_aporte==="COSTEA_TOTAL");
+    const cantidad=hs.reduce((s,h)=>s+(h.tipo_aporte==="ARTICULO"?Number(h.cantidad||0):0),0);
+    const efectivo=hs.reduce((s,h)=>s+(h.tipo_aporte==="APORTE_ECONOMICO"?Number(h.monto||0):0),0);
+    const valorArticulo=cantidad*Number(x.precio_unitario||0);
+    const cubierto=completo?Number(x.costo_total||0):Math.min(Number(x.costo_total||0),valorArticulo+efectivo);
+    const pct=Number(x.costo_total)>0?Math.min(100,Math.round(cubierto/Number(x.costo_total)*100)):0;
+    return '<div class="border rounded p-3 mb-2"><div class="d-flex justify-content-between gap-2"><div><b>'+x.articulo+'</b><div class="small text-muted">'+x.codigo_rubro+' · Necesario: '+Number(x.cantidad_necesaria||0).toLocaleString()+'</div></div><b>'+pct+'%</b></div><div class="progress my-2" style="height:8px"><div class="progress-bar" style="width:'+pct+'%"></div></div><div class="small">En artículos: '+cantidad.toLocaleString()+' · En efectivo: RD$ '+efectivo.toLocaleString(undefined,{maximumFractionDigits:2})+(completo?' · <b>Costo total cubierto</b>':'')+'</div></div>';
+  }).join("")||'<div class="text-muted">No hay artículos para este rubro.</div>';
+
+  const history=document.querySelector("#donationHistory");
+  if(history) history.innerHTML=hist.map(h=>{
+    const tipo=h.tipo_aporte==="ARTICULO"?"Llevará artículo":h.tipo_aporte==="COSTEA_TOTAL"?"Costea total":"Aporte económico";
+    const valor=h.tipo_aporte==="ARTICULO"?(Number(h.cantidad||0)+" unidad(es)"):h.tipo_aporte==="COSTEA_TOTAL"?("RD$ "+Number(h.costo_total||0).toLocaleString(undefined,{maximumFractionDigits:2})):("RD$ "+Number(h.monto||0).toLocaleString(undefined,{maximumFractionDigits:2}));
+    const fecha=new Date(h.creado_en).toLocaleString();
+    return '<div class="border rounded p-3 mb-2"><div class="d-flex justify-content-between gap-2"><div><b>'+h.bienhechor+'</b><div class="small text-muted">'+(h.telefono||"Sin teléfono")+'</div></div><span class="badge text-bg-secondary">'+h.codigo_rubro+'</span></div><div class="mt-2"><b>'+h.articulo+'</b> · '+tipo+' · '+valor+'</div><div class="small text-muted mt-1">Registrado por '+(h.vendedor_nombre||"Administración")+' · '+fecha+'</div>'+(h.observacion?'<div class="small mt-1">'+h.observacion+'</div>':'')+'</div>';
+  }).join("")||'<div class="text-muted">Todavía no hay donaciones registradas.</div>';
+}
