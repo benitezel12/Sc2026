@@ -1,7 +1,10 @@
 const sb=supabase.createClient(SC.url,SC.key);
-async function requireUser(){let {data:{session}}=await sb.auth.getSession();if(!session){if(location.pathname!=="/")location="/";return null;}if(location.pathname!=="/"){const {data:p}=await sb.from("perfiles").select("rol,activo").eq("user_id",session.user.id).maybeSingle();if(!p||!p.activo){await sb.auth.signOut();alert("Tu cuenta todavía no tiene un perfil autorizado.");location="/";return null;}const adminPages=["/dashboard","/vendedores","/boletas","/escanear"];if(adminPages.includes(location.pathname)&&p.rol!=="ADMIN"){location=p.rol==="VENDEDOR"?"/vendedor":"/";return null;}if(location.pathname==="/vendedor"&&p.rol!=="VENDEDOR"){location=p.rol==="ADMIN"?"/dashboard":"/";return null;}}return session}
+async function requireUser(){let {data:{session}}=await sb.auth.getSession();if(!session){if(location.pathname!=="/")location="/";return null;}if(location.pathname!=="/"){const {data:p}=await sb.from("perfiles").select("rol,activo").eq("user_id",session.user.id).maybeSingle();if(!p||!p.activo){await sb.auth.signOut();alert("Tu cuenta todavía no tiene un perfil autorizado.");location="/";return null;}const adminPages=["/dashboard","/vendedores","/boletas","/escanear"];
+if(adminPages.includes(location.pathname)&&p.rol!=="ADMIN"){location=p.rol==="VENDEDOR"?"/vendedor":p.rol==="EJECUTIVO"?"/ejecutivo":"/";return null;}
+if(location.pathname==="/vendedor"&&p.rol!=="VENDEDOR"){location=p.rol==="ADMIN"?"/dashboard":p.rol==="EJECUTIVO"?"/ejecutivo":"/";return null;}
+if(location.pathname==="/ejecutivo"&&p.rol!=="EJECUTIVO"&&p.rol!=="ADMIN"){location=p.rol==="VENDEDOR"?"/vendedor":"/";return null;}}return session}
 if(location.pathname!=="/") requireUser();
-async function login(){let email=document.querySelector("#email").value,password=document.querySelector("#password").value;let {error}=await sb.auth.signInWithPassword({email,password});document.querySelector("#msg").textContent=error?error.message:"Acceso correcto";if(!error){const {data:{user}}=await sb.auth.getUser();const {data:p}=await sb.from("perfiles").select("rol,activo").eq("user_id",user?.id).maybeSingle();if(!p||!p.activo){await sb.auth.signOut();document.querySelector("#msg").textContent="Esta cuenta todavía no tiene acceso autorizado.";return;}location=p.rol==="VENDEDOR"?"/vendedor":p.rol==="ADMIN"?"/dashboard":"/"}}
+async function login(){let email=document.querySelector("#email").value,password=document.querySelector("#password").value;let {error}=await sb.auth.signInWithPassword({email,password});document.querySelector("#msg").textContent=error?error.message:"Acceso correcto";if(!error){const {data:{user}}=await sb.auth.getUser();const {data:p}=await sb.from("perfiles").select("rol,activo").eq("user_id",user?.id).maybeSingle();if(!p||!p.activo){await sb.auth.signOut();document.querySelector("#msg").textContent="Esta cuenta todavía no tiene acceso autorizado.";return;}location=p.rol==="VENDEDOR"?"/vendedor":p.rol==="EJECUTIVO"?"/ejecutivo":p.rol==="ADMIN"?"/dashboard":"/"}}
 document.querySelector("#logout")?.addEventListener("click",async()=>{await sb.auth.signOut();location="/"});
 async function loadDashboard(){let {data}=await sb.from("boletas").select("estado,precio");let counts={};let vendido=0;(data||[]).forEach(x=>{counts[x.estado]=(counts[x.estado]||0)+1;if(["PAGADA","UTILIZADA"].includes(x.estado))vendido+=Number(x.precio)});let vals=[["Total",(data||[]).length],["Disponibles",counts.DISPONIBLE||0],["Asignadas",counts.ASIGNADA||0],["Pagadas",(counts.PAGADA||0)+(counts.UTILIZADA||0)],["Entradas",counts.UTILIZADA||0],["Vendido","RD$ "+vendido.toLocaleString()]];document.querySelector("#kpis").innerHTML=vals.map(v=>`<div class="col-6 col-lg-4"><div class="card kpi shadow-sm p-3"><small class="text-muted">${v[0]}</small><div class="fs-3 fw-bold">${v[1]}</div></div></div>`).join("")}
 let vendedoresCache=[];
@@ -271,4 +274,26 @@ function renderDonaciones(){
     const fecha=new Date(h.creado_en).toLocaleString();
     return '<div class="border rounded p-3 mb-2"><div class="d-flex justify-content-between gap-2"><div><b>'+h.bienhechor+'</b><div class="small text-muted">'+(h.telefono||"Sin teléfono")+'</div></div><span class="badge text-bg-secondary">'+h.codigo_rubro+'</span></div><div class="mt-2"><b>'+h.articulo+'</b> · '+tipo+' · '+valor+'</div><div class="small text-muted mt-1">Registrado por '+(h.vendedor_nombre||"Administración")+' · '+fecha+'</div>'+(h.observacion?'<div class="small mt-1">'+h.observacion+'</div>':'')+'</div>';
   }).join("")||'<div class="text-muted">Todavía no hay donaciones registradas.</div>';
+}
+
+
+async function loadEjecutivo(){
+  const [{data:t,error:e1},{data:s,error:e2}]=await Promise.all([
+    sb.rpc("resumen_ventas_ejecutivo"),
+    sb.rpc("resumen_ventas_por_vendedor")
+  ]);
+  const k=document.querySelector("#execKpis");
+  const box=document.querySelector("#execSales");
+  if(e1||e2){if(box)box.innerHTML='<div class="alert alert-danger">No se pudo cargar el resumen ejecutivo.</div>';return;}
+  const x=t?.[0]||{};
+  if(k)k.innerHTML=[
+    ["Total boletas",x.total_boletas||0],
+    ["Asignadas",x.asignadas||0],
+    ["Pagadas",x.pagadas||0],
+    ["Disponibles",x.disponibles||0],
+    ["Entradas",x.utilizadas||0],
+    ["Vendido","RD$ "+Number(x.monto_vendido||0).toLocaleString()]
+  ].map(v=>'<div class="col-6 col-lg-4"><div class="card kpi p-3 text-center"><small class="text-muted">'+v[0]+'</small><b class="fs-4">'+v[1]+'</b></div></div>').join("");
+
+  if(box)box.innerHTML=(s||[]).map(v=>'<div class="border rounded p-3 mb-2"><div class="d-flex justify-content-between"><b>'+v.vendedor_nombre+'</b><b>RD$ '+Number(v.monto_vendido||0).toLocaleString()+'</b></div><div class="row g-2 text-center mt-1"><div class="col-4"><small class="text-muted d-block">Asignadas</small><b>'+v.asignadas+'</b></div><div class="col-4"><small class="text-muted d-block">Pagadas</small><b>'+v.pagadas+'</b></div><div class="col-4"><small class="text-muted d-block">Pendientes</small><b>'+v.pendientes+'</b></div></div></div>').join("")||'<div class="text-muted">No hay vendedores activos.</div>';
 }
