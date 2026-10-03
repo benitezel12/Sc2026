@@ -194,6 +194,28 @@ function actualizarCamposDonacion(){
   }
 }
 
+
+function telefonoWhatsAppRD(valor){
+  let n=(valor||"").replace(/\D/g,"");
+  if(n.length===10)n="1"+n;
+  return n;
+}
+function mensajeAgradecimientoDonacion(nombre,articulo){
+  return "¡Muchas gracias, "+nombre+"! 🙏\n\nAgradecemos de corazón tu aporte para San Compartiendo 2026. Tu generosidad con "+articulo+" nos ayuda a hacer posible esta actividad.\n\nQue Dios bendiga tu solidaridad y tu apoyo.\n\nSalesianos · Oratorio Centro Juvenil Hogar Escuela";
+}
+function abrirWhatsAppAgradecimiento(nombre,telefono,articulo){
+  const n=telefonoWhatsAppRD(telefono);
+  if(!n){alert("Esta donación no tiene un teléfono registrado.");return;}
+  const url="https://wa.me/"+n+"?text="+encodeURIComponent(mensajeAgradecimientoDonacion(nombre,articulo));
+  window.open(url,"_blank","noopener");
+}
+function mostrarAgradecimientoDonacion(nombre,telefono,articulo){
+  const box=document.querySelector("#dnShareResult");
+  if(!box)return;
+  if(!telefono){box.innerHTML='<div class="alert alert-success mt-2 mb-0"><b>Donación registrada.</b><div class="small mt-1">Agrega un teléfono al bienhechor para enviarle el agradecimiento por WhatsApp.</div></div>';return;}
+  box.innerHTML='<div class="card border-0 shadow-sm mt-2"><div class="card-body text-center"><div class="fs-1">🙏</div><h5 class="mb-1">¡Gracias, '+nombre+'!</h5><p class="mb-3">Tu aporte para <b>San Compartiendo 2026</b> hace posible esta actividad.</p><button class="btn btn-success w-100" onclick="abrirWhatsAppAgradecimiento('+JSON.stringify(nombre)+','+JSON.stringify(telefono)+','+JSON.stringify(articulo)+')">💬 Compartir agradecimiento por WhatsApp</button></div></div>';
+}
+
 async function registrarDonacion(){
   const nombre=document.querySelector("#dnNombre")?.value.trim();
   const telefono=document.querySelector("#dnTelefono")?.value.trim();
@@ -233,6 +255,7 @@ async function registrarDonacion(){
   });
   if(error){alert("No se pudo registrar: "+error.message);return;}
   if(data){
+    const agradecer={nombre,telefono,articulo:articulo.articulo};
     document.querySelector("#dnNombre").value="";
     document.querySelector("#dnTelefono").value="";
     document.querySelector("#dnObs").value="";
@@ -241,6 +264,7 @@ async function registrarDonacion(){
     document.querySelector("#dnGestionadoPor").value=donationProfile?.nombre||"";
     alert("Donación registrada correctamente. Queda pendiente de confirmación y recepción por administración.");
     await loadDonaciones();
+    mostrarAgradecimientoDonacion(agradecer.nombre,agradecer.telefono,agradecer.articulo);
   }
 }
 
