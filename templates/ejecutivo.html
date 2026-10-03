@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="mb-3">
+  <h2 class="mb-1">Resumen Ejecutivo</h2>
+  <p class="text-muted mb-0">Seguimiento general de ventas y donaciones.</p>
+</div>
+
+<div id="execKpis" class="row g-2 mb-4"></div>
+
+<div class="card p-3 mb-4 shadow-sm">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h5 class="mb-0">Ventas por vendedor</h5>
+    <a class="btn btn-outline-secondary btn-sm" href="/donaciones">🤝 Donaciones</a>
+  </div>
+  <div id="execSales"></div>
+</div>
+
+<div class="card p-3 shadow-sm">
+  <h5 class="mb-3">Acciones</h5>
+  <div class="d-grid gap-2 d-md-flex">
+    <a class="btn btn-primary" href="/donaciones">Registrar donación</a>
+    <a class="btn btn-outline-primary" href="/donaciones">Ver avance de donaciones</a>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}<script>loadEjecutivo()</script>{% endblock %}
