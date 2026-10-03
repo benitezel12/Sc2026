@@ -1,5 +1,5 @@
 const sb=supabase.createClient(SC.url,SC.key);
-async function requireUser(){let {data:{session}}=await sb.auth.getSession();if(!session){if(location.pathname!=="/")location="/";return null;}if(location.pathname!=="/"){const {data:p}=await sb.from("perfiles").select("rol,activo").eq("user_id",session.user.id).maybeSingle();if(!p||!p.activo){await sb.auth.signOut();alert("Tu cuenta todavía no tiene un perfil autorizado.");location="/";return null;}const adminPages=["/dashboard","/vendedores","/boletas"];if(adminPages.includes(location.pathname)&&p.rol!=="ADMIN"){location=p.rol==="VENDEDOR"?"/vendedor":"/";return null;}if(location.pathname==="/vendedor"&&p.rol!=="VENDEDOR"){location=p.rol==="ADMIN"?"/dashboard":"/";return null;}}return session}
+async function requireUser(){let {data:{session}}=await sb.auth.getSession();if(!session){if(location.pathname!=="/")location="/";return null;}if(location.pathname!=="/"){const {data:p}=await sb.from("perfiles").select("rol,activo").eq("user_id",session.user.id).maybeSingle();if(!p||!p.activo){await sb.auth.signOut();alert("Tu cuenta todavía no tiene un perfil autorizado.");location="/";return null;}const adminPages=["/dashboard","/vendedores","/boletas","/escanear"];if(adminPages.includes(location.pathname)&&p.rol!=="ADMIN"){location=p.rol==="VENDEDOR"?"/vendedor":"/";return null;}if(location.pathname==="/vendedor"&&p.rol!=="VENDEDOR"){location=p.rol==="ADMIN"?"/dashboard":"/";return null;}}return session}
 if(location.pathname!=="/") requireUser();
 async function login(){let email=document.querySelector("#email").value,password=document.querySelector("#password").value;let {error}=await sb.auth.signInWithPassword({email,password});document.querySelector("#msg").textContent=error?error.message:"Acceso correcto";if(!error){const {data:{user}}=await sb.auth.getUser();const {data:p}=await sb.from("perfiles").select("rol,activo").eq("user_id",user?.id).maybeSingle();if(!p||!p.activo){await sb.auth.signOut();document.querySelector("#msg").textContent="Esta cuenta todavía no tiene acceso autorizado.";return;}location=p.rol==="VENDEDOR"?"/vendedor":p.rol==="ADMIN"?"/dashboard":"/"}}
 document.querySelector("#logout")?.addEventListener("click",async()=>{await sb.auth.signOut();location="/"});
@@ -93,3 +93,25 @@ async function iniciarScannerVendedor(){
  catch(e){sellerTicketResult.innerHTML='<div class="alert alert-warning">No se pudo abrir la cámara. Verifica el permiso del navegador.</div>';cerrarScannerVendedor();}
 }
 async function cerrarScannerVendedor(){if(sellerScanner){try{await sellerScanner.stop();}catch(e){}try{await sellerScanner.clear();}catch(e){}sellerScanner=null;}document.querySelector("#sellerScan")?.classList.add("d-none");}
+
+let adminScanner=null;
+async function buscarBoletaAdmin(numeroManual){
+ const input=document.querySelector("#adminNumero");
+ const raw=(numeroManual??input?.value??"").toString().trim();
+ if(!raw){alert("Escribe el número de la boleta.");return;}
+ const numero=/^\d+$/.test(raw)?raw.padStart(4,"0"):raw;
+ const {data:b,error}=await sb.from("boletas").select("id,numero,codigo_qr,estado,vendedor_id,vendida_a,area_pastoral_comprador,precio").eq("numero",numero).maybeSingle();
+ const box=document.querySelector("#adminScanResult");
+ if(error||!b){box.innerHTML='<div class="alert alert-warning">No se encontró la boleta #'+numero+'.</div>';return;}
+ const {data:v}=b.vendedor_id?await sb.from("vendedores").select("nombre").eq("id",b.vendedor_id).maybeSingle():{data:null};
+ box.innerHTML='<div class="card p-3 shadow-sm"><div class="d-flex justify-content-between align-items-center"><b class="fs-4">Boleta #'+b.numero+'</b><span class="badge text-bg-secondary">'+b.estado+'</span></div><hr><div><b>Vendedor:</b> '+(v?.nombre||"Sin asignar")+'</div><div><b>Comprador:</b> '+(b.vendida_a||"Sin registrar")+'</div><div><b>Área:</b> '+(b.area_pastoral_comprador||"Sin registrar")+'</div><div><b>Precio:</b> RD$ '+Number(b.precio||0).toLocaleString()+'</div><div class="d-grid gap-2 mt-3"><a class="btn btn-outline-primary" href="/boletas">Gestionar en Boletas</a></div></div>';
+ if(input)input.value=b.numero;
+}
+async function iniciarScannerAdmin(){
+ const panel=document.querySelector("#adminScanPanel");panel.classList.remove("d-none");
+ if(!window.Html5Qrcode){adminScanResult.innerHTML='<div class="alert alert-danger">No se pudo cargar el lector QR.</div>';return;}
+ adminScanner=new Html5Qrcode("adminReader");
+ try{await adminScanner.start({facingMode:"environment"},{fps:10,qrbox:{width:250,height:250}},async codigo=>{await cerrarScannerAdmin();const {data:b}=await sb.from("boletas").select("numero").eq("codigo_qr",codigo).maybeSingle();if(!b){adminScanResult.innerHTML='<div class="alert alert-danger">QR no reconocido.</div>';return;}await buscarBoletaAdmin(b.numero);});}
+ catch(e){adminScanResult.innerHTML='<div class="alert alert-warning">No se pudo abrir la cámara. Verifica el permiso del navegador.</div>';await cerrarScannerAdmin();}
+}
+async function cerrarScannerAdmin(){if(adminScanner){try{await adminScanner.stop();}catch(e){}try{await adminScanner.clear();}catch(e){}adminScanner=null;}document.querySelector("#adminScanPanel")?.classList.add("d-none");}
