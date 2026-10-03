@@ -1,6 +1,76 @@
 {% extends "base.html" %}
 {% block content %}
-<h2>Donaciones</h2>
-<div id="donationApp"></div>
+<div class="d-flex justify-content-between align-items-start mb-3">
+  <div>
+    <h2 class="mb-1">🤝 Donaciones</h2>
+    <p class="text-muted mb-0">Registro y seguimiento de aportes para San Compartiendo 2026.</p>
+  </div>
+  <a class="btn btn-outline-secondary btn-sm" href="javascript:history.back()">Volver</a>
+</div>
+
+<div id="donationKpis" class="row g-2 mb-4"></div>
+
+<div class="card p-3 mb-4 shadow-sm">
+  <h5 class="mb-3">Registrar donación</h5>
+  <div class="row g-2">
+    <div class="col-md-6">
+      <label class="form-label">Bienhechor</label>
+      <input id="dnNombre" class="form-control" placeholder="Nombre completo">
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Teléfono</label>
+      <input id="dnTelefono" class="form-control" inputmode="tel" placeholder="809...">
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">Rubro</label>
+      <select id="dnRubro" class="form-select" onchange="filtrarArticulosDonacion()"></select>
+    </div>
+    <div class="col-md-8">
+      <label class="form-label">Artículo</label>
+      <select id="dnArticulo" class="form-select" onchange="actualizarInfoArticuloDonacion()"></select>
+    </div>
+    <div class="col-12">
+      <div id="dnArticuloInfo" class="alert alert-light border mb-0"></div>
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Forma de donar</label>
+      <select id="dnTipo" class="form-select" onchange="actualizarCamposDonacion()">
+        <option value="ARTICULO">Llevará el artículo</option>
+        <option value="COSTEA_TOTAL">Costeará el total</option>
+        <option value="APORTE_ECONOMICO">Aportará un monto económico</option>
+      </select>
+    </div>
+    <div class="col-md-3" id="dnCantidadWrap">
+      <label class="form-label">Cantidad</label>
+      <input id="dnCantidad" class="form-control" type="number" min="0.01" step="0.01">
+    </div>
+    <div class="col-md-3 d-none" id="dnMontoWrap">
+      <label class="form-label">Monto RD$</label>
+      <input id="dnMonto" class="form-control" type="number" min="1" step="0.01">
+    </div>
+    <div class="col-12">
+      <label class="form-label">Observación</label>
+      <input id="dnObs" class="form-control" placeholder="Opcional">
+    </div>
+    <div class="col-12 d-grid">
+      <button class="btn btn-primary btn-lg" onclick="registrarDonacion()">Guardar donación</button>
+    </div>
+  </div>
+</div>
+
+<div class="card p-3 mb-4 shadow-sm">
+  <div class="d-flex flex-column flex-md-row justify-content-between gap-2 align-items-md-center mb-3">
+    <h5 class="mb-0">Avance por rubro</h5>
+    <select id="dnFiltroRubro" class="form-select form-select-sm" style="max-width:220px" onchange="renderDonaciones()">
+      <option value="">Todos los rubros</option>
+    </select>
+  </div>
+  <div id="donationProgress"></div>
+</div>
+
+<div class="card p-3 shadow-sm">
+  <h5 class="mb-3">Donaciones registradas</h5>
+  <div id="donationHistory"></div>
+</div>
 {% endblock %}
 {% block scripts %}<script>loadDonaciones()</script>{% endblock %}
