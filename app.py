@@ -30,5 +30,8 @@ def vendedor(): return render_template("vendedor.html")
 @app.get("/escanear")
 def escanear(): return render_template("escanear.html")
 
+@app.get("/donaciones")
+def donaciones(): return render_template("donaciones.html")
+
 if __name__=="__main__":
     app.run(debug=True)
