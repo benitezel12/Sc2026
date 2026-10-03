@@ -33,6 +33,10 @@
       <div id="dnArticuloInfo" class="alert alert-light border mb-0"></div>
     </div>
     <div class="col-md-6">
+      <label class="form-label">Gestionado por</label>
+      <input id="dnGestionadoPor" class="form-control" placeholder="Persona que gestiona la donación">
+    </div>
+    <div class="col-md-6">
       <label class="form-label">Forma de donar</label>
       <select id="dnTipo" class="form-select" onchange="actualizarCamposDonacion()">
         <option value="ARTICULO">Llevará el artículo</option>
@@ -47,6 +51,13 @@
     <div class="col-md-3 d-none" id="dnMontoWrap">
       <label class="form-label">Monto RD$</label>
       <input id="dnMonto" class="form-control" type="number" min="1" step="0.01">
+    </div>
+    <div class="col-md-6 d-none" id="dnMedioWrap">
+      <label class="form-label">Forma de entrega del dinero</label>
+      <select id="dnMedio" class="form-select">
+        <option value="TRANSFERENCIA">Transferencia bancaria</option>
+        <option value="EFECTIVO">Efectivo</option>
+      </select>
     </div>
     <div class="col-12">
       <label class="form-label">Observación</label>
