@@ -63,7 +63,30 @@ async function marcarPagada(boletaId,numero){if(!confirm("¿Marcar la boleta #"+
 
 
 async function borrarComprador(boletaId,numero,reload){if(!confirm("¿Borrar el nombre y área del comprador de la boleta #"+numero+"?"))return;const {data,error}=await sb.rpc("limpiar_comprador_boletas",{p_boleta_ids:[boletaId]});if(error){alert("No se pudo borrar: "+error.message);return;}if(data){alert("Datos del comprador eliminados.");await reload();}}
-async function registrarComprador(boletaId,numero,actual,areaActual){const nombre=prompt("¿A quién se vendió la boleta #"+numero+"?",actual||"");if(nombre===null)return;const limpio=nombre.trim();if(!limpio){alert("Escribe el nombre del comprador.");return;}const opciones=["CJ","ADS","Escuela Básica","Politécnico","Deporte","Otros"];const mensaje="Área pastoral del comprador:\n1. CJ\n2. ADS\n3. Escuela Básica\n4. Politécnico\n5. Deporte\n6. Otros";const pred=areaActual?String(opciones.indexOf(areaActual)+1):"";const sel=prompt(mensaje,pred);if(sel===null)return;const n=Number(sel);if(!Number.isInteger(n)||n<1||n>6){alert("Selecciona un número del 1 al 6.");return;}const area=opciones[n-1];const {error}=await sb.from("boletas").update({vendida_a:limpio,area_pastoral_comprador:area}).eq("id",boletaId).eq("estado","ASIGNADA");if(error){alert("No se pudo guardar: "+error.message);return;}alert("Comprador y área pastoral registrados.");await loadBoletas();}
+async function registrarComprador(boletaId,numero,actual,areaActual){
+  const nombre=prompt("¿A quién se vendió la boleta #"+numero+"?",actual||"");
+  if(nombre===null)return false;
+  const limpio=nombre.trim();
+  if(!limpio){alert("Escribe el nombre del comprador.");return false;}
+  const opciones=["CJ","ADS","Escuela Básica","Politécnico","Deporte","Otros"];
+  const mensaje="Área pastoral del comprador:\n1. CJ\n2. ADS\n3. Escuela Básica\n4. Politécnico\n5. Deporte\n6. Otros";
+  const previo=opciones.indexOf(areaActual);
+  const sel=prompt(mensaje,previo>=0?String(previo+1):"");
+  if(sel===null)return false;
+  const n=Number(sel);
+  if(!Number.isInteger(n)||n<1||n>6){alert("Selecciona un número del 1 al 6.");return false;}
+  const area=opciones[n-1];
+  const {data,error}=await sb.rpc("actualizar_comprador_boletas",{
+    p_boleta_ids:[boletaId],
+    p_vendida_a:limpio,
+    p_area:area
+  });
+  if(error){alert("No se pudo guardar: "+error.message);return false;}
+  if(Number(data)!==1){alert("La boleta no pudo actualizarse. Verifica que esté ASIGNADA.");return false;}
+  alert("Comprador y área pastoral registrados.");
+  if(document.querySelector("#tickets"))await loadBoletas();
+  return true;
+}
 
 let sellerBoletas=[],sellerScanner=null;
 async function loadSellerPortal(){
@@ -86,7 +109,17 @@ function sellerTicketCard(x){
 function renderSellerTickets(){sellerTickets.innerHTML=(sellerBoletas.length?'<div class="card p-2 mb-3"><div class="d-grid gap-2"><button class="btn btn-outline-primary" onclick="compradorMultiple(\'.seller-ticket-check\',loadSellerPortal)">Asignar comprador a seleccionadas</button><button class="btn btn-success" onclick="pagarMultiple(\'.seller-ticket-check\',loadSellerPortal)">Marcar seleccionadas pagadas</button><button class="btn btn-outline-danger" onclick="borrarCompradorMultiple(\'.seller-ticket-check\',loadSellerPortal)">Borrar comprador</button></div></div>':'')+(sellerBoletas.map(sellerTicketCard).join("")||'<div class="alert alert-info">No tienes boletas asignadas.</div>');}
 function mostrarMisBoletas(){sellerTickets.classList.remove("d-none");document.querySelector("#generalSales")?.classList.add("d-none");sellerTicketResult.innerHTML="";cerrarScannerVendedor();}
 async function mostrarVentasGenerales(){cerrarScannerVendedor();sellerTickets.classList.add("d-none");sellerTicketResult.innerHTML="";const box=document.querySelector("#generalSales");box.classList.remove("d-none");box.innerHTML='<div class="text-center p-3">Cargando...</div>';const {data,error}=await sb.rpc("resumen_general_ventas");if(error||!data?.length){box.innerHTML='<div class="alert alert-danger">No se pudo cargar el resumen general.</div>';return;}const x=data[0];box.innerHTML='<div class="card shadow-sm p-3"><h5 class="mb-3">📊 Ventas generales</h5><div class="row g-2 text-center"><div class="col-6"><div class="border rounded p-3"><small class="text-muted d-block">Boletas pagadas</small><b class="fs-3">'+x.pagadas+'</b></div></div><div class="col-6"><div class="border rounded p-3"><small class="text-muted d-block">Monto vendido</small><b class="fs-5">RD$ '+Number(x.monto_vendido||0).toLocaleString()+'</b></div></div><div class="col-6"><div class="border rounded p-3"><small class="text-muted d-block">Asignadas pendientes</small><b class="fs-3">'+x.asignadas+'</b></div></div><div class="col-6"><div class="border rounded p-3"><small class="text-muted d-block">Disponibles</small><b class="fs-3">'+x.disponibles+'</b></div></div></div><div class="small text-muted mt-3">Resumen general del evento. No muestra datos privados ni boletas de otros vendedores.</div></div>'}
-async function sellerEditar(id){const x=sellerBoletas.find(b=>b.id===id);if(!x)return;await registrarComprador(x.id,x.numero,x.vendida_a||"",x.area_pastoral_comprador||"");await loadSellerPortal();}
+async function sellerEditar(id){
+ const x=sellerBoletas.find(b=>b.id===id);
+ if(!x)return;
+ const guardado=await registrarComprador(x.id,x.numero,x.vendida_a||"",x.area_pastoral_comprador||"");
+ if(!guardado)return;
+ await loadSellerPortal();
+ const panel=document.querySelector("#sellerTicketResult");
+ if(panel && panel.innerHTML.includes("Boleta #"+x.numero)){
+   await buscarBoletaVendedor(x.numero);
+ }
+}
 async function sellerPagar(id,numero){await marcarPagada(id,numero);await loadSellerPortal();}
 async function buscarBoletaVendedor(numero,codigoQr){const raw=(numero??document.querySelector("#sellerNumeroBuscar")?.value??"").toString().trim();if(!raw&&!codigoQr){alert("Escribe el número de la boleta.");return;}const {data,error}=await sb.rpc("consultar_boleta_vendedor",{p_numero:raw||null,p_codigo_qr:codigoQr||null});const box=document.querySelector("#sellerTicketResult");const x=data?.[0];if(error||!x){box.innerHTML='<div class="alert alert-warning">No se encontró la boleta.</div>';return;}document.querySelector("#sellerTickets")?.classList.add("d-none");document.querySelector("#generalSales")?.classList.add("d-none");const gestion=x.es_mia&&x.estado==="ASIGNADA"?'<div class="d-grid gap-2 mt-3"><button class="btn btn-outline-primary" onclick="sellerEditar('+x.id+')">Registrar / editar comprador</button><button class="btn btn-success" onclick="sellerPagar('+x.id+',\''+x.numero+'\')">Marcar pagada</button>'+(x.vendida_a?'<button class="btn btn-outline-danger" onclick="borrarComprador('+x.id+',\''+x.numero+'\',loadSellerPortal)">Borrar comprador</button>':'')+'</div>':'<div class="alert alert-light border mt-3 mb-0">'+(x.es_mia?'Esta boleta no está disponible para gestión en su estado actual.':'Consulta solamente: esta boleta no está asignada a ti.')+'</div>';box.innerHTML='<div class="card p-3 shadow-sm"><div class="d-flex justify-content-between"><b class="fs-4">Boleta #'+x.numero+'</b><span class="badge text-bg-secondary">'+x.estado+'</span></div><hr><div><b>Vendedor:</b> '+(x.vendedor_nombre||"Sin asignar")+'</div>'+(x.es_mia?'<div><b>Comprador:</b> '+(x.vendida_a||"Sin registrar")+'</div><div><b>Área:</b> '+(x.area_pastoral_comprador||"Sin registrar")+'</div>':'')+'<div><b>Precio:</b> RD$ '+Number(x.precio||0).toLocaleString()+'</div>'+gestion+'</div>';if(document.querySelector("#sellerNumeroBuscar"))document.querySelector("#sellerNumeroBuscar").value=x.numero;}
 async function iniciarScannerVendedor(){
