@@ -5,6 +5,21 @@ if(location.pathname==="/vendedor"&&p.rol!=="VENDEDOR"){location=p.rol==="ADMIN"
 if(location.pathname==="/ejecutivo"&&p.rol!=="EJECUTIVO"&&p.rol!=="ADMIN"){location=p.rol==="VENDEDOR"?"/vendedor":"/";return null;}}return session}
 if(location.pathname!=="/") requireUser();
 async function login(){let email=document.querySelector("#email").value,password=document.querySelector("#password").value;let {error}=await sb.auth.signInWithPassword({email,password});document.querySelector("#msg").textContent=error?error.message:"Acceso correcto";if(!error){const {data:{user}}=await sb.auth.getUser();const {data:p}=await sb.from("perfiles").select("rol,activo").eq("user_id",user?.id).maybeSingle();if(!p||!p.activo){await sb.auth.signOut();document.querySelector("#msg").textContent="Esta cuenta todavía no tiene acceso autorizado.";return;}location=p.rol==="VENDEDOR"?"/vendedor":p.rol==="EJECUTIVO"?"/ejecutivo":p.rol==="ADMIN"?"/dashboard":"/"}}
+function mostrarActivacionVendedor(){
+ document.querySelector("#activarVendedor")?.classList.toggle("d-none");
+}
+async function activarVendedor(){
+ const email=document.querySelector("#altaEmail")?.value.trim();
+ const password=document.querySelector("#altaPassword")?.value;
+ const msg=document.querySelector("#msg");
+ if(!email||!password){msg.textContent="Completa el correo y la contraseña.";return;}
+ if(password.length<12){msg.textContent="La contraseña debe tener al menos 12 caracteres.";return;}
+ const {data,error}=await sb.auth.signUp({email,password});
+ if(error){msg.textContent="No se pudo activar: "+error.message;return;}
+ // La asignación VENDEDOR se efectúa por servidor únicamente cuando se confirma el correo autorizado.
+ if(data?.session){await sb.auth.signOut();}
+ msg.textContent="Si el registro fue aceptado, revisa tu correo y confirma el enlace para activar el acceso.";
+}
 document.querySelector("#logout")?.addEventListener("click",async()=>{await sb.auth.signOut();location="/"});
 async function loadDashboard(){let {data}=await sb.from("boletas").select("estado,precio");let counts={};let vendido=0;(data||[]).forEach(x=>{counts[x.estado]=(counts[x.estado]||0)+1;if(["PAGADA","UTILIZADA"].includes(x.estado))vendido+=Number(x.precio)});let vals=[["Total",(data||[]).length],["Disponibles",counts.DISPONIBLE||0],["Asignadas",counts.ASIGNADA||0],["Pagadas",(counts.PAGADA||0)+(counts.UTILIZADA||0)],["Entradas",counts.UTILIZADA||0],["Vendido","RD$ "+vendido.toLocaleString()]];document.querySelector("#kpis").innerHTML=vals.map(v=>`<div class="col-6 col-lg-4"><div class="card kpi shadow-sm p-3"><small class="text-muted">${v[0]}</small><div class="fs-3 fw-bold">${v[1]}</div></div></div>`).join("")}
 let vendedoresCache=[];
