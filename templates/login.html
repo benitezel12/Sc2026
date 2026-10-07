@@ -4,12 +4,5 @@
 <input id="email" class="form-control mb-2" type="email" placeholder="Correo">
 <input id="password" class="form-control mb-3" type="password" placeholder="Contraseña">
 <button class="btn btn-primary w-100" onclick="login()">Entrar</button>
-<button class="btn btn-link w-100 mt-2" onclick="mostrarActivacionVendedor()">Activar cuenta de vendedor</button>
-<div id="activarVendedor" class="d-none border-top mt-3 pt-3">
- <h5>Activar acceso autorizado</h5>
- <p class="small text-muted">Utiliza el correo registrado para tu cuenta de vendedor. Recibirás un mensaje para confirmar tu correo.</p>
- <input id="altaEmail" type="email" autocomplete="email" class="form-control mb-2" placeholder="Correo autorizado">
- <input id="altaPassword" type="password" autocomplete="new-password" class="form-control mb-2" placeholder="Nueva contraseña (12 caracteres mínimo)">
- <button class="btn btn-outline-primary w-100" onclick="activarVendedor()">Crear acceso</button>
-</div><div id="msg" class="mt-3 small"></div>
+<div id="msg" class="mt-3 small"></div>
 </div></div></div>{% endblock %}
