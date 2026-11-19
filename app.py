@@ -36,5 +36,8 @@ def donaciones(): return render_template("donaciones.html")
 @app.get("/ejecutivo")
 def ejecutivo(): return render_template("ejecutivo.html")
 
+@app.get("/entrada")
+def entrada(): return render_template("entrada.html")
+
 if __name__=="__main__":
     app.run(debug=True)
