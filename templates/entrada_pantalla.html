@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="entry-screen-shell">
+  <div class="entry-screen-overlay"></div>
+  <div class="entry-screen-content">
+    <div class="entry-screen-header">
+      <img src="/static/logo_salesianos.svg" class="entry-screen-logo" alt="Salesianos">
+      <div>
+        <div class="entry-screen-kicker">SAN COMPARTIENDO 2026</div>
+        <h1 class="entry-screen-title">Bienvenidos</h1>
+        <div class="entry-screen-subtitle">Escanee su boleta para ingresar</div>
+      </div>
+    </div>
+
+    <div id="entryScreenResult" class="entry-screen-result entry-screen-ready">
+      <div class="entry-screen-icon">🎟️</div>
+      <div class="entry-screen-main">Acerque el código QR al lector</div>
+      <div class="entry-screen-note">El sistema validará la boleta automáticamente.</div>
+    </div>
+
+    <div class="entry-screen-reader">
+      <input id="entryQrInput" class="form-control form-control-lg text-center" autocomplete="off" autofocus placeholder="Esperando lectura QR...">
+      <div class="small mt-2">Compatible con lector QR USB configurado como teclado.</div>
+    </div>
+
+    <div id="entryScreenStats" class="entry-screen-stats"></div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}<script>loadEntradaPantalla()</script>{% endblock %}
