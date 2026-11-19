@@ -39,5 +39,8 @@ def ejecutivo(): return render_template("ejecutivo.html")
 @app.get("/entrada")
 def entrada(): return render_template("entrada.html")
 
+@app.get("/entrada-pantalla")
+def entrada_pantalla(): return render_template("entrada_pantalla.html")
+
 if __name__=="__main__":
     app.run(debug=True)
