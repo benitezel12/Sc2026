@@ -2,7 +2,7 @@ const sb=supabase.createClient(SC.url,SC.key);
 async function requireUser(){let {data:{session}}=await sb.auth.getSession();if(!session){if(location.pathname!=="/")location="/";return null;}if(location.pathname!=="/"){const {data:p}=await sb.from("perfiles").select("rol,activo").eq("user_id",session.user.id).maybeSingle();if(!p||!p.activo){await sb.auth.signOut();alert("Tu cuenta todavía no tiene un perfil autorizado.");location="/";return null;}const adminPages=["/dashboard","/vendedores","/boletas","/escanear"];
 if(adminPages.includes(location.pathname)&&p.rol!=="ADMIN"){location=p.rol==="VENDEDOR"?"/vendedor":p.rol==="EJECUTIVO"?"/ejecutivo":"/";return null;}
 if(location.pathname==="/vendedor"&&p.rol!=="VENDEDOR"){location=p.rol==="ADMIN"?"/dashboard":p.rol==="EJECUTIVO"?"/ejecutivo":"/";return null;}
-if(location.pathname==="/ejecutivo"&&p.rol!=="EJECUTIVO"&&p.rol!=="ADMIN"){location=p.rol==="VENDEDOR"?"/vendedor":"/";return null;}if(location.pathname==="/entrada"&&!["ADMIN","ENTRADA"].includes(p.rol)){location=p.rol==="VENDEDOR"?"/vendedor":p.rol==="EJECUTIVO"?"/ejecutivo":"/";return null;}}return session}
+if(location.pathname==="/ejecutivo"&&p.rol!=="EJECUTIVO"&&p.rol!=="ADMIN"){location=p.rol==="VENDEDOR"?"/vendedor":"/";return null;}if(["/entrada","/entrada-pantalla"].includes(location.pathname)&&!["ADMIN","ENTRADA"].includes(p.rol)){location=p.rol==="VENDEDOR"?"/vendedor":p.rol==="EJECUTIVO"?"/ejecutivo":"/";return null;}}return session}
 if(location.pathname!=="/") requireUser();
 async function login(){let email=document.querySelector("#email").value,password=document.querySelector("#password").value;let {error}=await sb.auth.signInWithPassword({email,password});document.querySelector("#msg").textContent=error?error.message:"Acceso correcto";if(!error){const {data:{user}}=await sb.auth.getUser();const {data:p}=await sb.from("perfiles").select("rol,activo").eq("user_id",user?.id).maybeSingle();if(!p||!p.activo){await sb.auth.signOut();document.querySelector("#msg").textContent="Esta cuenta todavía no tiene acceso autorizado.";return;}location=p.rol==="VENDEDOR"?"/vendedor":p.rol==="EJECUTIVO"?"/ejecutivo":p.rol==="ADMIN"?"/dashboard":"/"}}
 function mostrarActivacionVendedor(){
@@ -91,6 +91,77 @@ async function cerrarScannerEntrada(){
     entryScanner=null;
   }
   document.querySelector("#entryScanPanel")?.classList.add("d-none");
+}
+
+
+let entryScreenResetTimer=null;
+function setEntryScreenState(kind,title,subtitle,detail){
+  const box=document.querySelector("#entryScreenResult");
+  if(!box)return;
+  box.className="entry-screen-result entry-screen-"+kind;
+  const icon=kind==="ok"?"✅":kind==="ticket"?"🎫":kind==="warning"?"⚠️":kind==="danger"?"⛔":"🎟️";
+  box.innerHTML='<div class="entry-screen-icon">'+icon+'</div><div class="entry-screen-main">'+title+'</div>'+(subtitle?'<div class="entry-screen-sub">'+subtitle+'</div>':'')+(detail?'<div class="entry-screen-note">'+detail+'</div>':'');
+}
+function resetEntradaPantalla(){
+  setEntryScreenState("ready","Acerque el código QR al lector","","El sistema validará la boleta automáticamente.");
+  const input=document.querySelector("#entryQrInput");
+  if(input){input.value="";input.focus();}
+}
+async function actualizarStatsPantalla(){
+  const {data}=await sb.rpc("resumen_entrada");
+  const x=data?.[0]||{};
+  const box=document.querySelector("#entryScreenStats");
+  if(box)box.innerHTML='<div><b>'+Number(x.entradas_registradas||0)+'</b><span>Entradas registradas</span></div><div><b>'+Number(x.pagadas_pendientes||0)+'</b><span>Pagadas pendientes</span></div>';
+}
+async function procesarQrPantalla(codigo){
+  const limpio=(codigo||"").trim();
+  if(!limpio)return;
+  const input=document.querySelector("#entryQrInput");
+  if(input)input.disabled=true;
+  setEntryScreenState("ticket","Validando boleta…","","");
+  const {data,error}=await sb.rpc("validar_entrada_pantalla",{p_codigo_qr:limpio});
+  if(error){
+    setEntryScreenState("danger","Error de validación","","Solicite asistencia al personal.");
+  }else{
+    const r=data?.[0]||{};
+    if(r.resultado==="OK"){
+      const nombre=r.comprador?("¡Bienvenido, "+r.comprador+"!"):"¡Bienvenido!";
+      setEntryScreenState("ok",nombre,"Boleta #"+(r.numero||""),"Puede ingresar. ¡Disfrute San Compartiendo 2026!");
+    }else if(r.resultado==="NO_PAGADA"){
+      setEntryScreenState("warning","PASE POR BOLETERÍA","Boleta #"+(r.numero||""),"Esta boleta aún no figura como pagada.");
+    }else if(r.resultado==="YA_UTILIZADA"){
+      setEntryScreenState("danger","BOLETA YA UTILIZADA","Boleta #"+(r.numero||""),"Solicite asistencia al personal de entrada.");
+    }else{
+      setEntryScreenState("danger","BOLETA NO ENCONTRADA","","Verifique el código o solicite asistencia.");
+    }
+  }
+  await actualizarStatsPantalla();
+  if(input)input.disabled=false;
+  clearTimeout(entryScreenResetTimer);
+  entryScreenResetTimer=setTimeout(resetEntradaPantalla,5500);
+}
+async function loadEntradaPantalla(){
+  document.body.classList.add("entry-display-mode");
+  await actualizarStatsPantalla();
+  resetEntradaPantalla();
+  const input=document.querySelector("#entryQrInput");
+  if(!input)return;
+  input.addEventListener("keydown",async e=>{
+    if(e.key==="Enter"){
+      e.preventDefault();
+      const codigo=input.value;
+      input.value="";
+      await procesarQrPantalla(codigo);
+    }
+  });
+  document.addEventListener("click",()=>input.focus());
+  window.addEventListener("focus",()=>input.focus());
+}
+async function pantallaCompletaEntrada(){
+  try{
+    if(!document.fullscreenElement)await document.documentElement.requestFullscreen();
+    else await document.exitFullscreen();
+  }catch(e){}
 }
 
 document.querySelector("#logout")?.addEventListener("click",async()=>{await sb.auth.signOut();location="/"});
