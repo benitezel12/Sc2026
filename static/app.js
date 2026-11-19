@@ -119,7 +119,10 @@ async function procesarQrPantalla(codigo){
   const input=document.querySelector("#entryQrInput");
   if(input)input.disabled=true;
   setEntryScreenState("ticket","Validando boleta…","","");
-  const {data,error}=await sb.rpc("validar_entrada_pantalla",{p_codigo_qr:limpio});
+  const esNumero=/^\d{1,4}$/.test(limpio);
+  const {data,error}=esNumero
+    ? await sb.rpc("validar_entrada_numero",{p_numero:limpio})
+    : await sb.rpc("validar_entrada_pantalla",{p_codigo_qr:limpio});
   if(error){
     setEntryScreenState("danger","Error de validación","","Solicite asistencia al personal.");
   }else{
