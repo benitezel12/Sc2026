@@ -2,7 +2,7 @@ const sb=supabase.createClient(SC.url,SC.key);
 async function requireUser(){let {data:{session}}=await sb.auth.getSession();if(!session){if(location.pathname!=="/")location="/";return null;}if(location.pathname!=="/"){const {data:p}=await sb.from("perfiles").select("rol,activo").eq("user_id",session.user.id).maybeSingle();if(!p||!p.activo){await sb.auth.signOut();alert("Tu cuenta todavía no tiene un perfil autorizado.");location="/";return null;}const adminPages=["/dashboard","/vendedores","/boletas","/escanear"];
 if(adminPages.includes(location.pathname)&&p.rol!=="ADMIN"){location=p.rol==="VENDEDOR"?"/vendedor":p.rol==="EJECUTIVO"?"/ejecutivo":"/";return null;}
 if(location.pathname==="/vendedor"&&p.rol!=="VENDEDOR"){location=p.rol==="ADMIN"?"/dashboard":p.rol==="EJECUTIVO"?"/ejecutivo":"/";return null;}
-if(location.pathname==="/ejecutivo"&&p.rol!=="EJECUTIVO"&&p.rol!=="ADMIN"){location=p.rol==="VENDEDOR"?"/vendedor":"/";return null;}}return session}
+if(location.pathname==="/ejecutivo"&&p.rol!=="EJECUTIVO"&&p.rol!=="ADMIN"){location=p.rol==="VENDEDOR"?"/vendedor":"/";return null;}if(location.pathname==="/entrada"&&!["ADMIN","ENTRADA"].includes(p.rol)){location=p.rol==="VENDEDOR"?"/vendedor":p.rol==="EJECUTIVO"?"/ejecutivo":"/";return null;}}return session}
 if(location.pathname!=="/") requireUser();
 async function login(){let email=document.querySelector("#email").value,password=document.querySelector("#password").value;let {error}=await sb.auth.signInWithPassword({email,password});document.querySelector("#msg").textContent=error?error.message:"Acceso correcto";if(!error){const {data:{user}}=await sb.auth.getUser();const {data:p}=await sb.from("perfiles").select("rol,activo").eq("user_id",user?.id).maybeSingle();if(!p||!p.activo){await sb.auth.signOut();document.querySelector("#msg").textContent="Esta cuenta todavía no tiene acceso autorizado.";return;}location=p.rol==="VENDEDOR"?"/vendedor":p.rol==="EJECUTIVO"?"/ejecutivo":p.rol==="ADMIN"?"/dashboard":"/"}}
 function mostrarActivacionVendedor(){
@@ -20,6 +20,79 @@ async function activarVendedor(){
  if(data?.session){await sb.auth.signOut();}
  msg.textContent="Si el registro fue aceptado, revisa tu correo y confirma el enlace para activar el acceso.";
 }
+
+let entryScanner=null;
+async function loadEntrada(){
+  const {data,error}=await sb.rpc("resumen_entrada");
+  const box=document.querySelector("#entryKpis");
+  if(!box)return;
+  if(error){box.innerHTML='<div class="col-12"><div class="alert alert-danger">No se pudo cargar el resumen de entrada.</div></div>';return;}
+  const x=data?.[0]||{};
+  box.innerHTML=[
+    ["Pagadas pendientes",x.pagadas_pendientes||0],
+    ["Entradas registradas",x.entradas_registradas||0],
+    ["Total validables",x.total_validables||0]
+  ].map(v=>'<div class="col-4"><div class="card kpi p-3 text-center"><small class="text-muted">'+v[0]+'</small><b class="fs-4">'+v[1]+'</b></div></div>').join("");
+}
+function renderEntradaResultado(r){
+  const box=document.querySelector("#entryResult");
+  if(!box)return;
+  const num=r?.numero||"";
+  if(r?.resultado==="OK"){
+    box.innerHTML='<div class="alert alert-success text-center py-4"><div class="display-4">✅</div><h2 class="mb-1">ENTRADA VÁLIDA</h2><div class="fs-3">Boleta #'+num+'</div>'+(r.comprador?'<div class="mt-2"><b>Comprador:</b> '+r.comprador+'</div>':'')+'</div>';
+  }else if(r?.resultado==="YA_UTILIZADA"){
+    box.innerHTML='<div class="alert alert-danger text-center py-4"><div class="display-4">⛔</div><h2 class="mb-1">BOLETA YA UTILIZADA</h2><div class="fs-3">#'+num+'</div></div>';
+  }else if(r?.resultado==="NO_PAGADA"){
+    box.innerHTML='<div class="alert alert-warning text-center py-4"><div class="display-4">⚠️</div><h2 class="mb-1">BOLETA NO PAGADA</h2><div class="fs-3">#'+num+'</div><div>Estado actual: '+(r.estado||"")+'</div></div>';
+  }else{
+    box.innerHTML='<div class="alert alert-danger text-center py-4"><div class="display-4">❌</div><h2 class="mb-1">BOLETA NO ENCONTRADA</h2></div>';
+  }
+}
+async function validarEntradaQR(codigo){
+  const {data,error}=await sb.rpc("validar_entrada",{p_codigo_qr:codigo});
+  if(error){document.querySelector("#entryResult").innerHTML='<div class="alert alert-danger">'+error.message+'</div>';return;}
+  renderEntradaResultado(data?.[0]);
+  await loadEntrada();
+}
+async function validarEntradaManual(){
+  const input=document.querySelector("#entryNumero");
+  const numero=input?.value.trim();
+  if(!numero){alert("Escribe el número de la boleta.");return;}
+  const {data,error}=await sb.rpc("validar_entrada_numero",{p_numero:numero});
+  if(error){document.querySelector("#entryResult").innerHTML='<div class="alert alert-danger">'+error.message+'</div>';return;}
+  renderEntradaResultado(data?.[0]);
+  if(input)input.value="";
+  await loadEntrada();
+}
+async function iniciarScannerEntrada(){
+  const panel=document.querySelector("#entryScanPanel");
+  panel?.classList.remove("d-none");
+  if(entryScanner)return;
+  entryScanner=new Html5Qrcode("entryReader");
+  try{
+    await entryScanner.start(
+      {facingMode:"environment"},
+      {fps:10,qrbox:{width:250,height:250}},
+      async decoded=>{
+        await cerrarScannerEntrada();
+        await validarEntradaQR(decoded);
+      }
+    );
+  }catch(e){
+    panel?.classList.add("d-none");
+    entryScanner=null;
+    document.querySelector("#entryResult").innerHTML='<div class="alert alert-danger">No se pudo abrir la cámara. Verifica el permiso del navegador.</div>';
+  }
+}
+async function cerrarScannerEntrada(){
+  if(entryScanner){
+    try{await entryScanner.stop();}catch(e){}
+    try{await entryScanner.clear();}catch(e){}
+    entryScanner=null;
+  }
+  document.querySelector("#entryScanPanel")?.classList.add("d-none");
+}
+
 document.querySelector("#logout")?.addEventListener("click",async()=>{await sb.auth.signOut();location="/"});
 async function loadDashboard(){let {data}=await sb.from("boletas").select("estado,precio");let counts={};let vendido=0;(data||[]).forEach(x=>{counts[x.estado]=(counts[x.estado]||0)+1;if(["PAGADA","UTILIZADA"].includes(x.estado))vendido+=Number(x.precio)});let vals=[["Total",(data||[]).length],["Disponibles",counts.DISPONIBLE||0],["Asignadas",counts.ASIGNADA||0],["Pagadas",(counts.PAGADA||0)+(counts.UTILIZADA||0)],["Entradas",counts.UTILIZADA||0],["Vendido","RD$ "+vendido.toLocaleString()]];document.querySelector("#kpis").innerHTML=vals.map(v=>`<div class="col-6 col-lg-4"><div class="card kpi shadow-sm p-3"><small class="text-muted">${v[0]}</small><div class="fs-3 fw-bold">${v[1]}</div></div></div>`).join("")}
 let vendedoresCache=[];
