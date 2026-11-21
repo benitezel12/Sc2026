@@ -119,7 +119,7 @@ async function procesarQrPantalla(codigo){
   const input=document.querySelector("#entryQrInput");
   if(input)input.disabled=true;
   setEntryScreenState("ticket","Validando boleta…","","");
-  const esNumero=/^\d{1,4}$/.test(limpio);
+  const esNumero=/^\d+$/.test(limpio);
   const {data,error}=esNumero
     ? await sb.rpc("validar_entrada_numero",{p_numero:limpio})
     : await sb.rpc("validar_entrada_pantalla",{p_codigo_qr:limpio});
@@ -129,9 +129,10 @@ async function procesarQrPantalla(codigo){
     const r=data?.[0]||{};
     if(r.resultado==="OK"){
       const nombre=r.comprador?("¡Bienvenido, "+r.comprador+"!"):"¡Bienvenido!";
-      setEntryScreenState("ok",nombre,"Boleta #"+(r.numero||""),"Puede ingresar. ¡Disfrute San Compartiendo 2026!");
+      const detalleVendedor=r.vendedor?(" • Vendedor: "+r.vendedor):"";
+      setEntryScreenState("ok",nombre,"Boleta #"+(r.numero||"")+" VÁLIDA","Entrada autorizada"+detalleVendedor+". ¡Disfrute San Compartiendo 2026!");
     }else if(r.resultado==="NO_PAGADA"){
-      setEntryScreenState("warning","PASE POR BOLETERÍA","Boleta #"+(r.numero||""),"Esta boleta aún no figura como pagada.");
+      setEntryScreenState("warning","PASE POR BOLETERÍA","Boleta #"+(r.numero||""),"Esta boleta no figura como pagada. Verifique en boletería antes de ingresar.");
     }else if(r.resultado==="YA_UTILIZADA"){
       setEntryScreenState("danger","BOLETA YA UTILIZADA","Boleta #"+(r.numero||""),"Solicite asistencia al personal de entrada.");
     }else{
